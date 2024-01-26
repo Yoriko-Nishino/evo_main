@@ -442,212 +442,7 @@ class MyIterate():
         dict['weights'] = weights
         #print(dict)
         return dict
-        
-    def adj_cal_iterate1(self,a, b):
-        # 结果
-        anchors_dict=[]
-        
-        disab=[]
-        weightab=[]
-        log_npy=[]
-        anchors_npy=[]
-        max_times=6000000
-        iterate_times=300000
-        while(len(disab)<iterate_times and max_times>0):
-            random_anchors=[]
-            while len(random_anchors)<4:
-                point=random.sample([x for x in range(0,self.len_stru) if x not in (a, b)], 1)
-                point=point[0]
-                valid = True
-                for item in random_anchors:
-                    if item==a or item==b: #or abs(item-point)<6:
-                        valid=False
-                        break
-                if valid:
-                    random_anchors.append(point)
-            random_anchors.sort()
-        
-            py=random_anchors[0:3]
-            useful_list3,useful_weight_3 = self.if_legitimate(py[0],py[1:])
-            
-            p4=random_anchors[3]
-            random_anchors=[]
-            
-            useful_list4,useful_weight_4=self.is_legit(p4,py,useful_list3,useful_weight_3)
-            
-            useful_weight_4 = [x for x in useful_weight_4]
-            
-            py.append(p4) # anchors
-            
-            max_times=max_times-1
-            useful_list_pos=[]
-            useful_list_pos_weight=[]
-            for index,item in enumerate(useful_list4):
-                item1,item2=item
-                matrix=self.partmatrix(py,item1,item2)
-                pos3d=self.set3dpos(matrix)
-                if not pos3d:
-                    continue
-                useful_list_pos.append((py,item1,item2,matrix,pos3d))
-                useful_list_pos_weight.append(useful_weight_4[index])
-                #([22, 54, 70, 61], (0, 0, 0), (0, 0, 0), [[0, 0, 0], [22.507019, 0, 0], [22.496767069185125, 11.268982992266531, 0], [17.33936779449892, 5.566864360239078, 4.682573445703423]])
-            # 计算dij和权重
-            useful_list_posa=[]
-            useful_list_posa_weight=[]
-            for index,item in enumerate(useful_list_pos):# 所有可行的坐标
-                anchors,uselist1,uselist2,matrix,pos3d=item
-                combinations4 = all_combinations(input_lists)
-                for combination in combinations4:   
-                    tho=[]
-                    tho.append(self.data_npy[a][py[0]][combination[0]])
-                    tho.append(self.data_npy[a][py[1]][combination[1]])
-                    tho.append(self.data_npy[a][py[2]][combination[2]])
-                    tho.append(self.data_npy[a][py[3]][combination[3]])
-                    if tho[0] <0 or tho[1]<0 or tho[2]<0 or tho[3]<0:
-                        continue
-                    pos_a=find3dpos(tho,pos3d)
-                    if not pos_a:
-                        continue
-                    weight_1=self.weight_npy[a][py[0]][combination[0]]
-                    weight_2=self.weight_npy[a][py[1]][combination[1]]
-                    weight_3=self.weight_npy[a][py[2]][combination[2]]
-                    weight_4=self.weight_npy[a][py[3]][combination[3]]
-                    #取log操作
-                    weight_all = np.array([weight_1, weight_2, weight_3, weight_4])
-                    weight_all=np.sum(np.log(weight_all))
-                    weight_whole = weight_all.tolist()+useful_list_pos_weight[index]
-                    useful_list_posa_weight.append(weight_whole)
-                    useful_list_posa.append((anchors,uselist1,uselist2,matrix,pos3d,pos_a,combination))
-
-            useful_list_posb=[]
-            useful_list_posab_weight=[]
-            for index,item in enumerate(useful_list_posa):# 所有可行的坐标
-                anchors,uselist1,uselist2,matrix,pos3d,posa,combinationa=item
-                combinations4 = all_combinations(input_lists)
-                for combination in combinations4:   
-                    tho=[]
-                    tho.append(self.data_npy[b][py[0]][combination[0]])
-                    tho.append(self.data_npy[b][py[1]][combination[1]])
-                    tho.append(self.data_npy[b][py[2]][combination[2]])
-                    tho.append(self.data_npy[b][py[3]][combination[3]])
-                    if tho[0] <0 or tho[1]<0 or tho[2]<0 or tho[3]<0:
-                        continue
-                    pos_b=find3dpos(tho,pos3d)
-                    if not pos_b:
-                        continue
-                    
-                    weight_1=self.weight_npy[b][py[0]][combination[0]]
-                    weight_2=self.weight_npy[b][py[1]][combination[1]]
-                    weight_3=self.weight_npy[b][py[2]][combination[2]]
-                    weight_4=self.weight_npy[b][py[3]][combination[3]]
-                    #取log操作
-                    weight_all=np.array([weight_1,weight_2,weight_3,weight_4])
-                    weight_all=np.sum(np.log(weight_all))
-                    weight_whole=weight_all.tolist()+useful_list_posa_weight[index]
-                    
-                    disaba=caldistance(posa,pos_b)
-                    disaba=sqrt(disaba)
-                    #print(posa,pos_b,disaba)
-                    disab.append(disaba)
-                    # 保存计算过程
-                    mymatrix=self.partofmatrix(matrix,anchors,a,b,combinationa,combination)
-                    mymatrix[4][5]=mymatrix[5][4]=disaba
-                    anchors_dict.append(self.create_dict(anchors,mymatrix))
-                    
-                    # print("tag ",anchors,uselist1,uselist2,pos3d,combinationa,posa,combination,pos_b,disaba)
-                    weightab.append(weight_whole)
-                    log_npy.append([disaba,np.exp(weight_whole)])
-                    anchors_npy.append([anchors,uselist1,uselist2,combinationa,combination])
-            
-            
-            
-        save_path=os.path.join(self.basepath,"other",str(a)+'_'+str(b))
-        logging.info(f"a: {a} ,b:{b} ,{disab}")
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
-        if len(disab)<iterate_times:
-            print("yuki ",a,b)
-        
-        if len(disab)==0:
-            print("yiko ",a,b)
-            mus=[self.data_npy[a][b],self.data_npy[a][b]]
-            weights=[self.weight_npy[a][b],self.weight_npy[a][b]]
-        else:
-            #####   anchors      #####
-            with open(save_path+'/anchors_dict.pkl', 'wb') as f:
-                pickle.dump(anchors_dict, f)
-            
-            #####   dis_weight   #####
-            with open(save_path+'/dis_weight.txt', 'w') as file:
-                for item in log_npy:
-                    output = "{:<{width}} {:<{width}}".format(item[0], item[1], width=20)
-                    #yy=str(item[0])+' '+str(item[1])+'\n'
-                    file.write(output+'\n')
-            np.save(save_path+'/dis_weight.npy', log_npy)    
-
-            #####   +weight     #####
-            combined_list=data3weight(disab,weightab,save_path)
-            
-            # 将列表保存为.pkl文件
-            with open(save_path+'/todraw.pkl', 'wb') as f:
-                pickle.dump(combined_list, f)
-            # 指定保存的文件路径
-            file_path = save_path+"/data.txt"
-            # 将列表转换为字符串，元素之间用空格分隔
-            data_str = " ".join(str(element) for element in combined_list)
-            # 打开文件，并以写入模式写入数据
-            with open(file_path, "w") as file:
-                file.write(data_str)
-            # 去噪
-            combined_list=denoise1(combined_list) #?
-            with open(save_path+'/after_denoise.pkl', 'wb') as f:
-                pickle.dump(combined_list, f)
-                
-            if len(combined_list) ==0:
-                print("after denoise none: ",a,b) #去噪后没了
-                logging.INFO(f"after denoise none: {a} {b}")
-                return self.data_npy[a][b],[0,0],self.weight_npy[a][b]   
-            # gmm
-            my_array = np.array(combined_list)
-
-            mus, covs, weights = gmm.get_gmm_para_mutil(my_array.reshape(-1, 1),save_path,a,b)
-            #print("拟合结果：",mus,covs,weights)
-            muss=flatten(mus.tolist())
-            covss=flatten(covs.tolist())
-            weightss=flatten(weights)
-            print("拟合结果：",muss,covss,weightss)
-            logger.info("yoriko: "+str(a)+" "+str(b)+" "+str(len(my_array))+" "+str(muss)+str(covss)+str(weightss))
-            # draw pic
-            nat_dis=[self.nat_npy1[a][b]]
-            if self.pdbname!=self.pdbname2:
-                nat_dis.append(self.nat_npy2[a][b])
-                
-            print(self.pdbname,self.pdbname2)
-            
-            task1(combined_list,a,b,muss,covss,weightss,self.basepath,self.pdbname,nat_dis=nat_dis,pf_dis=list(self.data_npy[a][b]))
-            # 处理一下？
-            if len(mus)==3:
-                height_peak=calculate_gaussian_mixture_peak_height(muss,covss,weightss)
-                print("height_peak",height_peak)
-                height_peak=height_peak.tolist()
-                idx1,idx2=find_max_two_indices(height_peak)
-                
-                mus = [mus[idx1][0],mus[idx2][0]]
-                covs = [covs[idx1][0][0],covs[idx2][0][0]]
-                weights = [weights[idx1],weights[idx2]]
-            elif len(mus) ==2: #1 or 2
-                mus = [mus[0][0],mus[1][0]]
-                covs = [covs[0][0][0],covs[1][0][0]]
-                weights = [weights[0],weights[1]]
-            else:
-                mus = [mus[0][0],-1]
-                covs = [covs[0][0][0],0]
-                weights = [1,0]
-        
-            #task_bins(combined_list,a,b,mus,covs,weights,self.basepath,self.pdbname)
-        #print("res: ",a,b,mus,weights)
-        return mus,covs,weights
-
+    
     #第四个点,可能坐标
     def anchors_p4(self,p4,anchors,matrix=None,pos3d=None,flag=False):
         comb=all_combinations(input_lists[0:3])
@@ -708,6 +503,8 @@ class MyIterate():
     
     def initialize_anchors(self,pi,pj):
         res_dij=[]
+        res_weight=[]
+        
         anchors_dict=[]
         for item in self.triad_n:
             anchors=item[0]
@@ -745,16 +542,20 @@ class MyIterate():
                 for chiocepj in chioce_pj:
                     dij=sqrt(caldistance(chiocepi[1],chiocepj[1]))
                     res_dij.append(dij)
-                    matrix=self.partofmatrix(matrix,anchors,pi,pj,chiocepi[0],chiocepj[0])
-                    matrix[4][5]=matrix[5][4]=dij
+                    
                     weightpi=chiocepi[2]
                     weightpj=chiocepj[2]
                     weights=self.cal_weights(anchors,pi,pj,anchors_choice,p4chioce,chiocepi[0],chiocepj[0],weightpi,weightpj)
+                    res_weight.append(weights)
+                    
+                    matrix=self.partofmatrix(matrix,anchors,pi,pj,chiocepi[0],chiocepj[0])
+                    matrix[4][5]=matrix[5][4]=dij
                     anchors_dict.append(self.create_dict(anchors,matrix,weights))
             
-        return res_dij
+        return res_dij,res_weight
             
     def adj_cal_iterate(self,pi,pj):
+        
         save_path=os.path.join(self.basepath,"other",str(pi)+'_'+str(pj))
         res=[]
         try:
