@@ -1,0 +1,298 @@
+import random
+import numpy as np
+import json
+import math
+import os
+from numpy import sqrt
+import torch
+
+from dis2stru import dis2bins
+
+
+with open('path.json','r') as json_file:
+    global_path=json.load(json_file)
+
+threhold=21
+class TreeNode:
+    def __init__(self, value):
+        self.value = value
+        self.children = []
+
+    def add_child(self, child):
+        self.children.append(child)
+
+    def find_all_leaf_paths(self, current_path=None, all_paths=None):
+        # 初始化参数为 None，然后在函数内部创建新的列表
+        if current_path is None:
+            current_path = []
+        if all_paths is None:
+            all_paths = []
+            
+        # 添加当前节点到路径
+        current_path.append(self)
+
+        # 如果是叶子节点，将路径和叶子节点添加到所有路径列表中
+        if not self.children:
+            if self.value is not None:
+                all_paths.append((current_path.copy()))
+
+        # 在子节点中递归查找
+        for child in self.children:
+            child.find_all_leaf_paths(current_path.copy(), all_paths)
+
+        return all_paths
+
+def create_tree(root,i,j,tochioce):
+    all_path=root.find_all_leaf_paths()
+    flag=True
+    for item in all_path:
+        for chioce in tochioce:
+            if True:
+                newnode=TreeNode([i,j,chioce])
+                item[-1].add_child(newnode)
+                flag=False
+
+    if flag:
+        for item in all_path:
+            item[-1].children=[]
+        return False
+    return True
+
+
+#@jit(nopython=False)
+def is_triangle(edge1, edge2, edge3):
+    if edge1 >threhold or edge2 >threhold or edge3>threhold:
+        return False
+    # 检查三角不等式
+    if edge1 + edge2 > edge3 and edge1 + edge3 > edge2 and edge2 + edge3 > edge1:
+        return True
+    else:
+        return False
+    
+#@jit(nopython=False)
+def caldistance(pointa, pointb):
+    result = math.pow(pointa[0] - pointb[0], 2) + math.pow(pointa[1] - pointb[1], 2) + math.pow(pointa[2] - pointb[2],2)
+    
+    return result
+
+# 找到该点在坐标中的坐标点
+def find3dpos(tho,pos3d,pos_z=None):
+    '''
+    if threhold in tho:
+        return False
+    '''
+    
+    if any(element > threhold for element in tho):
+        return False
+        
+    x = ((((tho[0]) ** 2 - (tho[1]) ** 2) / pos3d[1][0]) + pos3d[1][0]) / 2 
+    y = ((tho[0] ** 2 - tho[2] ** 2 - x ** 2 + (x - pos3d[2][0]) ** 2) / pos3d[2][1] + pos3d[2][1]) / 2
+    z = (tho[0]) ** 2 - x ** 2 - y ** 2
+    if z<0:
+        return False
+    # verify
+    z=sqrt(z)
+    if pos_z is None:
+        return [x,y,z]
+    else:
+        pos_num=abs(caldistance([x, y, z], pos3d[3])-tho[3]**2)
+        neg_num=abs(caldistance([x, y, -z], pos3d[3])-tho[3]**2)
+        
+        if pos_num > neg_num:
+            z = 0 - z    
+    return [x, y, z]
+
+
+part_len=6
+
+class Divide():                            
+    def __init__(self,pdbname1=None,pdbname2=None):
+        self.pdbname1 = pdbname1
+        self.pdbname2 = pdbname2
+        self.todivide=np.load(f"/home/yuyue/evomatrix/evo/record/strategy0/2k7c_55_height_peak.npy")
+        self.af_npy=np.load(f"{global_path['alphafold_npy']}{pdbname1}.npy")
+        self.root=TreeNode([0,0,0])
+        self.stru_len=len(self.todivide)
+        self.part_num=math.ceil(self.stru_len/6)
+        
+        for i in range(part_len):
+            for j in range(i+1,part_len):
+                tochioce=self.toChioce(self.todivide[i,j],threhold=1)
+                print(i,j,tochioce)
+                create_tree(self.root,i,j,tochioce)
+        self.all_path=self.root.find_all_leaf_paths() 
+        print(len(self.all_path))
+        self.same_part=[[None for _ in range(self.stru_len)] for _ in range(self.stru_len)]
+        
+    def toChioce(self,todiv,threhold=None): #list
+        if threhold==None: threhold=3
+        
+        tochioce=[todiv[0],todiv[1]]#,af_npy[i,j]]
+        tochioce_res = [min(value, 21.6875) for value in tochioce]
+        if -1 in tochioce_res:tochioce_res.remove(-1)
+        tochioce_res.sort()
+        tochioce_res=list(set(tochioce_res))
+        if len(tochioce_res)==2 and abs(tochioce_res[0]-tochioce_res[1])<threhold:
+            flag=random.choice([0,1])
+            tochioce_res=[tochioce_res[flag]]
+        return tochioce_res
+
+    
+    def partmatrix(self,py,path):
+        matrix = []  # 4个锚点的子矩阵
+        row = 4
+        col = 4
+        for i in range(row):
+            m = []
+            for j in range(col):
+                m.append(0)
+            matrix.append(m)
+        
+        for item in path: # 从same里面挑选
+            if item.value[0]==py[0] and item.value[1]==py[1]: matrix[0][1]=matrix[1][0]=item.value[2]
+            elif item.value[0]==py[0] and item.value[1]==py[2]: matrix[0][2]=matrix[2][0]=item.value[2]
+            elif item.value[0]==py[1] and item.value[1]==py[2]: matrix[1][2]=matrix[2][1]=item.value[2]
+            
+            elif item.value[0]==py[0] and item.value[1]==py[3]: matrix[3][0]=matrix[0][3]=item.value[2]
+            elif item.value[0]==py[1] and item.value[1]==py[3]: matrix[3][1]=matrix[1][3]=item.value[2]
+            elif item.value[0]==py[2] and item.value[1]==py[3]: matrix[3][2]=matrix[2][3]=item.value[2]
+        
+        for index1,num1 in enumerate(py):
+            for index2,num2 in enumerate(py):
+                if (matrix[index1][index2]==0 and index1 != index2 and self.same_part[num1][num2]!=None):
+                    matrix[index1][index2]=matrix[index2][index1]=self.same_part[num1][num2]
+                
+        return matrix
+    
+    def set3dpos(self,matrix):
+        pos3d=[[],[],[],[]]
+        # print(matrix)
+        a = matrix[1][2]
+        b = matrix[2][0]
+        c = matrix[0][1]
+
+        pos3d[0] = [0, 0, 0]
+        pos3d[1] = [c, 0, 0]
+        try:
+            cos1 = (b ** 2 + c ** 2 - a ** 2) / (2 * b * c)
+        except Exception as e:
+            print(e)
+            
+            return [1,2,3]
+        x = b * cos1
+        if (abs(cos1) > 1):
+            # print("cos>1 error ", a, b, c, cos1)
+            return False
+
+        y = b * sqrt(1 - cos1 ** 2)
+        pos3d[2] = [x, y, 0]
+        
+        # print("set3dpos1: ",pos3d)
+        tho=[matrix[0][3],matrix[1][3],matrix[2][3]]
+        #print(tho)
+        posz=find3dpos(tho,pos3d,pos_z=None)
+        
+        if posz is False:
+            return False
+        else:
+            pos3d[3]=posz
+            
+        return pos3d
+    
+    def divide(self):
+        
+        for ki in range (1,self.part_num):
+            for kj in range(ki+1):
+                for pj in range(ki*part_len,(ki+1)*part_len):
+                    for pi in range(kj*part_len,(kj+1)*part_len):
+                        if pi>self.stru_len or pj>self.stru_len: #
+                                break
+                            
+                        if pi>pj:
+                            continue
+                        
+                        dis_ij=-1
+                             
+                        # 已知目标pi，pj
+                        self.all_path=self.root.find_all_leaf_paths() 
+                        for path in self.all_path:
+                            flag=27
+                            tochioce=self.toChioce(self.todivide[pi,pj])
+                            if len(tochioce)==1:
+                                #dis_ij=tochioce[0]
+                                print("same part:",pi,pj,tochioce)
+                                self.same_part[pi][pj]=tochioce[0]
+                                continue
+                            print("diff part:",pi,pj,tochioce)   
+                            while len(tochioce)>1:
+                                anchors=random.sample(range(0,ki*part_len),4)
+                                if pi in anchors or pj in anchors:
+                                    continue
+                                anchors.sort()
+                                flag=flag-1
+                                if flag==0:
+                                    break
+                                mymatrix = self.partmatrix(anchors,path)    
+                                pos3d=self.set3dpos(mymatrix)
+                                if not pos3d:
+                                    continue
+                                else:
+                                    tho1=[self.af_npy[pi][anchors[0]],self.af_npy[pi][anchors[1]],self.af_npy[pi][anchors[2]],self.af_npy[pi][anchors[3]]]
+                                    posa=find3dpos(tho1,pos3d,pos_z=1)
+                                    if not posa :continue
+                                    tho2=[self.af_npy[pj][anchors[0]],self.af_npy[pj][anchors[1]],self.af_npy[pj][anchors[2]],self.af_npy[pj][anchors[3]]]
+                                    posb=find3dpos(tho2,pos3d,pos_z=1)
+                                    if not posb :continue
+                                    dij=sqrt(caldistance(posa,posb))
+                                    # 选todivide里面最近的
+                                    dis_ij = min(tochioce, key=lambda x: abs(x - dij))
+                                    print("record: ",pi,pj,anchors,dij,dis_ij)
+                                    
+                                    break # 可能需要改
+                            if(dis_ij==-1):
+                                # 保持原来的值好了
+                                newnode=TreeNode([pi,pj,self.af_npy[pi][pj]])
+                            else:
+                                newnode=TreeNode([pi,pj,dis_ij])
+                                
+                            path[-1].add_child(newnode)
+                
+       
+        all_path=self.root.find_all_leaf_paths() 
+        print("structure:",len(all_path))
+        times=0
+        res = [[None for _ in range(self.stru_len)] for _ in range(self.stru_len)]
+        for path in all_path:
+            for item in path:
+                value=item.value
+                res[value[0]][value[1]]=res[value[1]][value[0]]=value[2]
+            
+            for i in range(self.stru_len):
+                for j in range(i,self.stru_len):    
+                    if i==j:
+                        res[i][j]=0
+                    if self.same_part[i][j]!=None:
+                        res[i][j]=res[j][i]=self.same_part[i][j]
+                    if res[i][j]==None:
+                        print("error",i,j,self.todivide[i,j],self.af_npy[i,j])
+
+            np.save(f"/home/yuyue/evomatrix/divide/divide_2/{self.pdbname1}/disgram/stru{times}.npy",np.array(res))
+            print(f"/home/yuyue/evomatrix/divide/divide_2/{self.pdbname1}/disgram/stru{times}.npy")
+            
+            dis2bins(self.pdbname1,f"stru{times}.npy",f"/home/yuyue/evomatrix/divide/divide_2/{self.pdbname1}/disgram/","/home/yuyue/evomatrix/divide/pf_npz/2k7c.npz")
+            times=times+1                        
+            
+        
+    
+    
+if __name__ == '__main__':
+    
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-p1', '--pdb_name1', dest='pdbname1', default="2k7c", help='input pdb name')
+    parser.add_argument('-p2', '--pdb_name2', dest='pdbname2', default="2k7d", help='input pdb name')
+    parser.add_argument('-n', '--n_iterate', dest='n_iterate', default="1", help='number of iterations')
+    args = parser.parse_args()
+    #print(args.pdbname1,args.pdbname2)    
+    obj=Divide(args.pdbname1,args.pdbname2)    
+    obj.divide()
